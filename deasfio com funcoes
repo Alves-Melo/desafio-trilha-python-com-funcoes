@@ -1,0 +1,202 @@
+AGENCIA_PADRAO = "0001"
+LIMITE_SAQUES = 3
+LIMITE_VALOR_SAQUE = 500.0
+
+menu = """
+[d] Depositar
+[s] Sacar
+[e] Extrato
+[nu] Novo usuário
+[nc] Nova conta
+[lc] Listar contas
+[q] Sair
+
+=> """
+
+usuarios = []
+contas = []
+
+
+def limpar_cpf(cpf: str) -> str:
+    return "".join(ch for ch in cpf if ch.isdigit())
+
+
+def buscar_usuario_por_cpf(cpf: str, usuarios_: list) -> dict | None:
+    cpf = limpar_cpf(cpf)
+    return next((u for u in usuarios_ if u["cpf"] == cpf), None)
+
+
+def proximo_numero_conta(contas_: list) -> int:
+    return len(contas_) + 1
+
+
+def selecionar_conta_por_numero(contas_: list) -> dict | None:
+    try:
+        numero = int(input("Informe o número da conta: ").strip())
+    except ValueError:
+        print("Número inválido.")
+        return None
+    conta = next((c for c in contas_ if c["numero"] == numero), None)
+    if not conta:
+        print("Conta não encontrada.")
+    return conta
+
+
+def criar_usuario(usuarios_: list) -> None:
+    print("\n=== Novo usuário ===")
+    nome = input("Nome completo: ").strip()
+    data_nascimento = input("Data de nascimento (DD/MM/AAAA): ").strip()
+    cpf = limpar_cpf(input("CPF: ").strip())
+
+    if not cpf or len(cpf) != 11:
+        print("CPF inválido.")
+        return
+    if buscar_usuario_por_cpf(cpf, usuarios_):
+        print("Já existe usuário com esse CPF.")
+        return
+
+    endereco = {
+        "logradouro": input("Logradouro: ").strip(),
+        "numero": input("Número: ").strip(),
+        "bairro": input("Bairro: ").strip(),
+        "cidade": input("Cidade: ").strip(),
+        "uf": input("UF: ").strip().upper(),
+    }
+
+    usuarios_.append(
+        {
+            "nome": nome,
+            "data_nascimento": data_nascimento,
+            "cpf": cpf,
+            "endereco": endereco,
+        }
+    )
+    print("Usuário criado.")
+
+
+def criar_conta(agencia: str, usuarios_: list, contas_: list) -> None:
+    print("\n=== Nova conta ===")
+    cpf = limpar_cpf(input("CPF do titular: ").strip())
+    usuario = buscar_usuario_por_cpf(cpf, usuarios_)
+    if not usuario:
+        print("Usuário não encontrado. Cadastre-o antes.")
+        return
+
+    conta = {
+        "agencia": agencia,
+        "numero": proximo_numero_conta(contas_),
+        "titular_cpf": cpf,
+        "saldo": 0.0,
+        "extrato": [],
+        "saques_realizados": 0,
+    }
+    contas_.append(conta)
+    print(
+        f"Conta criada: Agência {conta['agencia']} | Nº {conta['numero']} | Titular: {usuario['nome']}"
+    )
+
+
+def listar_contas(contas_: list, usuarios_: list) -> None:
+    print("\n=== Contas cadastradas ===")
+    if not contas_:
+        print("Nenhuma conta cadastrada.")
+        return
+    for c in contas_:
+        u = buscar_usuario_por_cpf(c["titular_cpf"], usuarios_)
+        titular = u["nome"] if u else "-"
+        print(
+            f"Agência: {c['agencia']} | Conta: {c['numero']} | Titular: {titular} | CPF: {c['titular_cpf']}"
+        )
+
+
+def depositar(conta: dict, valor: float, /) -> bool:
+    if valor <= 0:
+        print("Valor de depósito inválido.")
+        return False
+    conta["saldo"] += valor
+    conta["extrato"].append(("Depósito", valor))
+    print(f"Depósito de R$ {valor:.2f} realizado.")
+    return True
+
+
+def sacar(*, conta: dict, valor: float, limite: float, max_saques: int) -> bool:
+    if valor <= 0:
+        print("Valor de saque inválido.")
+        return False
+    if valor > conta["saldo"]:
+        print("Saldo insuficiente.")
+        return False
+    if valor > limite:
+        print(f"Excede o limite de R$ {limite:.2f}.")
+        return False
+    if conta["saques_realizados"] >= max_saques:
+        print("Máximo de saques excedido.")
+        return False
+
+    conta["saldo"] -= valor
+    conta["extrato"].append(("Saque", -valor))
+    conta["saques_realizados"] += 1
+    print(f"Saque de R$ {valor:.2f} realizado.")
+    return True
+
+
+def exibir_extrato(conta: dict, /, *, mostrar_saldo: bool = True) -> None:
+    print("\n================ EXTRATO ================")
+    if not conta["extrato"]:
+        print("Não foram realizadas movimentações.")
+    else:
+        for tipo, valor in conta["extrato"]:
+            print(f"{tipo:10}: R$ {abs(valor):.2f}")
+    if mostrar_saldo:
+        print(f"\nSaldo: R$ {conta['saldo']:.2f}")
+    print("=========================================")
+
+
+def main():
+    while True:
+        opcao = input(menu).strip().lower()
+
+        if opcao == "nu":
+            criar_usuario(usuarios)
+
+        elif opcao == "nc":
+            criar_conta(AGENCIA_PADRAO, usuarios, contas)
+
+        elif opcao == "lc":
+            listar_contas(contas, usuarios)
+
+        elif opcao == "d":
+            conta = selecionar_conta_por_numero(contas)
+            if conta:
+                try:
+                    valor = float(input("Valor do depósito: ").strip())
+                except ValueError:
+                    print("Valor inválido.")
+                    continue
+                depositar(conta, valor)
+
+        elif opcao == "s":
+            conta = selecionar_conta_por_numero(contas)
+            if conta:
+                try:
+                    valor = float(input("Valor do saque: ").strip())
+                except ValueError:
+                    print("Valor inválido.")
+                    continue
+                sacar(conta=conta, valor=valor, limite=LIMITE_VALOR_SAQUE, max_saques=LIMITE_SAQUES)
+
+        elif opcao == "e":
+            conta = selecionar_conta_por_numero(contas)
+            if conta:
+                exibir_extrato(conta, mostrar_saldo=True)
+
+        elif opcao == "q":
+            print("Encerrando.")
+            break
+
+        else:
+            print("Opção inválida.")
+
+
+if __name__ == "__main__":
+    main()
